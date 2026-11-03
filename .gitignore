@@ -1,0 +1,26 @@
+# Build output and generated Maven metadata
+target/
+/META-INF/maven/plugin.xml
+
+# Local configuration and credentials
+/.env*
+!/.env.example
+/.aws/
+
+# IDE and editor files
+/.idea/
+/.vscode/
+*.iml
+
+# Logs, crash dumps, and local databases
+*.log
+hs_err_pid*
+replay_pid*
+*.mv.db
+*.trace.db
+
+# Operating system and Python cache files
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]
