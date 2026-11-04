@@ -8,13 +8,12 @@ import com.example.troubleticket.repository.NoteRepository;
 import com.example.troubleticket.repository.ServiceRepository;
 import com.example.troubleticket.repository.TicketRepository;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Clock;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,16 +25,13 @@ public class TicketService {
     private final TransactionTemplate transactions;
     private final Clock clock;
 
-    @Autowired
     public TicketService(TicketRepository tickets, NoteRepository notes, ServiceRepository services,
-                         org.springframework.transaction.PlatformTransactionManager manager) {
-        this(tickets, notes, services, new TransactionTemplate(manager), Clock.systemUTC());
-    }
-
-    // Package-visible clock injection is useful for deterministic unit tests.
-    TicketService(TicketRepository tickets, NoteRepository notes, ServiceRepository services,
-                  TransactionTemplate transactions, Clock clock) {
-        this.tickets=tickets; this.notes=notes; this.services=services; this.transactions=transactions; this.clock=clock;
+                         PlatformTransactionManager manager) {
+        this.tickets = tickets;
+        this.notes = notes;
+        this.services = services;
+        this.transactions = new TransactionTemplate(manager);
+        this.clock = Clock.systemUTC();
     }
 
     public record CreateResult(TicketResponse ticket, boolean created) {}
