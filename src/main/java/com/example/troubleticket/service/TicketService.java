@@ -7,15 +7,17 @@ import com.example.troubleticket.exception.ApiException;
 import com.example.troubleticket.repository.NoteRepository;
 import com.example.troubleticket.repository.ServiceRepository;
 import com.example.troubleticket.repository.TicketRepository;
+import com.example.troubleticket.tools.TicketReader;
+import com.example.troubleticket.tools.TicketStatusValidator;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+
 import java.time.Clock;
 import java.util.List;
-import java.util.UUID;
 
 @Service
 public class TicketService {
@@ -24,6 +26,8 @@ public class TicketService {
     private final ServiceRepository services;
     private final TransactionTemplate transactions;
     private final Clock clock;
+    private final TicketReader reader;
+    private final TicketStatusValidator validator;
 
     public TicketService(TicketRepository tickets, NoteRepository notes, ServiceRepository services,
                          PlatformTransactionManager manager) {
@@ -32,68 +36,73 @@ public class TicketService {
         this.services = services;
         this.transactions = new TransactionTemplate(manager);
         this.clock = Clock.systemUTC();
+        this.reader = new TicketReader(tickets, notes);
+        this.validator = new TicketStatusValidator();
     }
 
-    public record CreateResult(TicketResponse ticket, boolean created) {}
+    public record CreateResult(TicketResponse ticket, boolean created) {
+    }
 
     public CreateResult create(String tenant, CreateRequest request) {
-        if (!"new".equals(request.status())) throw validation("Create accepts only status 'new'");
-        var existing = tickets.findByTenantIdAndExternalId(tenant, request.externalId());
-        if (existing.isPresent()) return new CreateResult(toResponse(existing.get()), false);
+        validator.validateNew(request.status());
+        return tickets.findByTenantIdAndExternalId(tenant, request.externalId())
+                .map(ticket -> new CreateResult(reader.toResponse(ticket), false))
+                .orElseGet(() -> createNewOrGetExisting(tenant, request));
+    }
+
+    private CreateResult createNewOrGetExisting(String tenant, CreateRequest request) {
         if (!services.existsActive(tenant, request.serviceId()))
-            throw new ApiException(HttpStatus.NOT_FOUND,"SERVICE_NOT_FOUND", "Service not found or unavailable");
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "SERVICE_NOT_FOUND",
+                    "Service not found or unavailable");
         try {
-            // Unique (tenant_id, external_id) is the concurrency-safe idempotency guarantee.
-            Ticket created = transactions.execute(status -> {
-                var ticket = new Ticket(UUID.randomUUID().toString(), tenant, request.externalId(),
-                    request.serviceId(), request.description(), "acknowledged", clock.instant());
-                tickets.saveAndFlush(ticket);
-                notes.saveAndFlush(new TicketNote(UUID.randomUUID().toString(), ticket.id(), request.note(), clock.instant()));
-                return ticket;
+            var ticket = transactions.execute(status -> {
+                var created = new Ticket(
+                        tenant,
+                        request.externalId(),
+                        request.serviceId(),
+                        request.description(),
+                        "acknowledged",
+                        clock.instant()
+                );
+                tickets.saveAndFlush(created);
+                notes.save(new TicketNote(created.id(), request.note(), clock.instant()));
+                return created;
             });
-            return new CreateResult(toResponse(created), true);
-        } catch (DataIntegrityViolationException duplicateOrForeignKeyFailure) {
-            // TransactionTemplate has already rolled back; read in a fresh transaction.
-            var concurrentlyCreated = tickets.findByTenantIdAndExternalId(tenant, request.externalId());
-            if (concurrentlyCreated.isPresent()) return new CreateResult(toResponse(concurrentlyCreated.get()), false);
-            // Other integrity violations must not be mislabeled as idempotent retries.
-            throw duplicateOrForeignKeyFailure;
+            return new CreateResult(reader.toResponse(ticket), true);
+
+        } catch (DataIntegrityViolationException ex) {
+            return tickets.findByTenantIdAndExternalId(tenant, request.externalId())
+                    .map(ticket -> new CreateResult(reader.toResponse(ticket), false))
+                    .orElseThrow(() -> ex);
         }
     }
 
-    @Transactional(readOnly=true)
+    @Transactional(readOnly = true)
     public List<TicketSummary> list(String tenant) {
         return tickets.findByTenantIdOrderByCreatedAtAscIdAsc(tenant).stream()
-            .map(t -> new TicketSummary(t.externalId(),t.serviceId(),t.description(),t.status())).toList();
+                .map(t -> new TicketSummary(t.externalId(), t.serviceId(), t.description(), t.status())).toList();
     }
 
-    @Transactional(readOnly=true)
-    public TicketResponse get(String tenant, String id) { return toResponse(owned(tenant,id)); }
+    @Transactional(readOnly = true)
+    public TicketResponse get(String tenant, String id) {
+        return reader.toResponse(reader.findOwned(tenant, id));
+    }
 
     @Transactional
     public TicketResponse close(String tenant, String id, CloseRequest request) {
-        if (!"closed".equals(request.status())) throw validation("Patch accepts only status 'closed'");
-        Ticket ticket=owned(tenant,id);
+        validator.validateClosed(request.status());
+        Ticket ticket = reader.findOwned(tenant, id);
         ticket.close();
         tickets.save(ticket);
-        return toResponse(ticket);
+        return reader.toResponse(ticket);
     }
 
     @Transactional
     public NoteResponse addNote(String tenant, String id, NoteRequest request) {
-        Ticket ticket=owned(tenant,id);
-        return toResponse(notes.saveAndFlush(new TicketNote(UUID.randomUUID().toString(), ticket.id(),
+        Ticket ticket = reader.findOwned(tenant, id);
+        return reader.toResponse(notes.save(new TicketNote(ticket.id(),
                 request.text(), clock.instant())));
     }
-
-    private Ticket owned(String tenant, String id) {
-        return tickets.findByIdAndTenantId(id,tenant).orElseThrow(() ->
-            new ApiException(HttpStatus.NOT_FOUND,"TROUBLE_TICKET_NOT_FOUND","Trouble Ticket not found"));
-    }
-    private TicketResponse toResponse(Ticket t) {
-        return new TicketResponse(t.id(),t.externalId(),t.serviceId(),t.description(),t.status(),
-            notes.findByTicketIdOrderByCreatedAtAscIdAsc(t.id()).stream().map(this::toResponse).toList());
-    }
-    private NoteResponse toResponse(TicketNote n) { return new NoteResponse(n.id(),n.text(),n.createdAt()); }
-    private ApiException validation(String message) { return new ApiException(HttpStatus.BAD_REQUEST,"VALIDATION_ERROR",message); }
 }

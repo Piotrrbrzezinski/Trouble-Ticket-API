@@ -15,7 +15,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import java.time.Instant;
 import java.util.Optional;
 import java.util.List;
 
@@ -53,7 +52,12 @@ class TicketServiceTest {
 
     @Test
     void idempotentCreateReturnsExistingRepresentationWithoutRecheckingService() {
-        var ticket = new Ticket("id", "a", "external", 1L, "first description", "closed", Instant.now());
+        var ticket = mock(Ticket.class);
+        when(ticket.id()).thenReturn("id");
+        when(ticket.externalId()).thenReturn("external");
+        when(ticket.serviceId()).thenReturn(1L);
+        when(ticket.description()).thenReturn("first description");
+        when(ticket.status()).thenReturn("closed");
         when(tickets.findByTenantIdAndExternalId("a", "external")).thenReturn(Optional.of(ticket));
         when(notes.findByTicketIdOrderByCreatedAtAscIdAsc("id")).thenReturn(List.of());
         var result = service().create("a", new CreateRequest("external", 999L, "new description", "new", "new note"));

@@ -284,7 +284,6 @@ src/main/java/com/example/troubleticket/
   entity/                        JPA entities
   dto/                           request and response models
   exception/                     domain errors and error response handling
-  config/                        technical configuration, e.g. request ID
   security/                      login, JWT, and scope-based authorization
 src/main/resources/db/
   migration/                     production Flyway migrations

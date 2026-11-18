@@ -87,8 +87,8 @@ public class SecurityConfig {
         JwtGrantedAuthoritiesConverter scopes=new JwtGrantedAuthoritiesConverter();
         JwtAuthenticationConverter converter=new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(scopes);
-        AuthenticationEntryPoint unauthorized=(request,response,e)->send(response,401,"UNAUTHORIZED","Missing or invalid Bearer token",mapper,request);
-        AccessDeniedHandler forbidden=(request,response,e)->send(response,403,"FORBIDDEN","Insufficient permissions",mapper,request);
+        AuthenticationEntryPoint unauthorized=(request,response,e)->send(response,401,"UNAUTHORIZED","Missing or invalid Bearer token",mapper);
+        AccessDeniedHandler forbidden=(request,response,e)->send(response,403,"FORBIDDEN","Insufficient permissions",mapper);
         http.csrf(csrf->csrf.disable()).sessionManagement(s->s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a->a
                 .requestMatchers(HttpMethod.POST,"/api/v1/auth/login").permitAll()
@@ -102,10 +102,9 @@ public class SecurityConfig {
         return http.build();
     }
     private static void send(jakarta.servlet.http.HttpServletResponse response,int status,String code,String message,
-                             ObjectMapper mapper,jakarta.servlet.http.HttpServletRequest request) throws java.io.IOException {
+                             ObjectMapper mapper) throws java.io.IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        Object id=request.getAttribute("requestId");
-        mapper.writeValue(response.getOutputStream(),new ErrorResponse(code,message,id==null?UUID.randomUUID().toString():id.toString()));
+        mapper.writeValue(response.getOutputStream(),new ErrorResponse(code,message,UUID.randomUUID().toString()));
     }
 }

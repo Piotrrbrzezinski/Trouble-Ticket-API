@@ -99,7 +99,6 @@ abstract class TroubleTicketApiIT {
                     .contentType(MediaType.APPLICATION_JSON).content(createBody("client-1")))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", containsString("/api/v1/troubleTicket/")))
-                .andExpect(header().exists("X-Request-ID"))
                 .andExpect(jsonPath("$.status").value("acknowledged"))
                 .andExpect(jsonPath("$.externalId").value("client-1"))
                 .andExpect(jsonPath("$.notes", hasSize(1)))
