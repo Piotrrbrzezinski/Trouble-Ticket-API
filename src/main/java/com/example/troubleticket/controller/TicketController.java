@@ -28,7 +28,7 @@ public class TicketController {
     @PostMapping
     public ResponseEntity<TicketResponse> create(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CreateRequest request) {
         var result = service.create(tenant(jwt), request);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(result.ticket().id()).toUri();
+        URI location = ServletUriComponentsBuilder.fromCurrentRequestUri().path("/{id}").buildAndExpand(result.ticket().id()).toUri();
         return ResponseEntity.status(result.created() ? 201 : 200).location(location).body(result.ticket());
     }
 

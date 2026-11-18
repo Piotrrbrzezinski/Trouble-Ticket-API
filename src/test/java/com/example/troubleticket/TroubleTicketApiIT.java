@@ -94,11 +94,12 @@ abstract class TroubleTicketApiIT {
 
     @Test
     void createAndGetHaveCorrectShapeAndHeaders() throws Exception {
-        String body = mvc.perform(post("/api/v1/troubleTicket")
+        String body = mvc.perform(post("/api/v1/troubleTicket?tracking=123")
                     .header(HttpHeaders.AUTHORIZATION, bearer("tenant-a", "ticket:write"))
                     .contentType(MediaType.APPLICATION_JSON).content(createBody("client-1")))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", containsString("/api/v1/troubleTicket/")))
+                .andExpect(header().string("Location", not(containsString("?"))))
                 .andExpect(jsonPath("$.status").value("acknowledged"))
                 .andExpect(jsonPath("$.externalId").value("client-1"))
                 .andExpect(jsonPath("$.notes", hasSize(1)))

@@ -257,6 +257,20 @@ The integration tests cover controllers, Spring Security, JWT, services,
 repositories, JPA, Flyway migrations, tenant isolation, validation, user login,
 and concurrent idempotency.
 
+## Contract assumptions
+
+- Ticket and note IDs are UUID strings. The `TT-...` and `NOTE-...` values in the
+  OpenAPI examples illustrate the response shape; the schemas require only
+  nonempty strings.
+- Idempotency is keyed by `(tenant_id, externalId)`. A repeat create with a
+  valid request returns the current representation of the existing ticket,
+  even if its other request fields differ or its status has since changed.
+- A note may be added to a closed ticket. The contract does not restrict notes
+  by ticket status, and adding one does not reopen the ticket.
+- The OpenAPI contract does not define token issuance or service management.
+  The local login endpoint and database-backed service catalog support a
+  runnable demonstration; only the ticket endpoints form the public contract.
+
 ## Architecture and design decisions
 
 | Area | Decision |
